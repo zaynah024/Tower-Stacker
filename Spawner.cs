@@ -50,15 +50,8 @@ public class Spawner : MonoBehaviour
            HandleInput();
        }
 
-       if (stack.Count > 1)
-       {
-           Vector3 upDirection = stack[0].transform.up;
-           float tiltAngle = Vector3.Angle(Vector3.up, upDirection);
-           if (tiltAngle > 30f)
-           {
-               GameOver();
-           }
-       }
+    
+       CheckTowerInstability();
    }
 
    void HandleInput()
@@ -107,6 +100,14 @@ public class Spawner : MonoBehaviour
        Tile tileScript = activeTile.GetComponent<Tile>();
        stack.Add(activeTile);
 
+      
+       Rigidbody rb = activeTile.GetComponent<Rigidbody>();
+       if (rb == null)
+           rb = activeTile.AddComponent<Rigidbody>();
+       
+       rb.centerOfMass = new Vector3(0, -activeTile.transform.localScale.y / 2, 0);
+       rb.isKinematic = true; 
+
        if (stack.Count > 2)
        {
            float randomX = Random.Range(0.5f, 5f);
@@ -135,21 +136,73 @@ public class Spawner : MonoBehaviour
 
        activeTile.GetComponent<Renderer>().material.color = new Color(Random.value, Random.value, Random.value);
 
-tileScript.moveAlongX = stack.Count % 2 == 0;
+       tileScript.moveAlongX = stack.Count % 2 == 0;
    }
 
    public void GameOver()
+{
+    if (finishedGame) return;
+
+    finishedGame = true;
+    StartButton.SetActive(true);
+    Time.timeScale = 0.3f;
+
+    if (stack.Count > 1)
+    {
+        GameObject lastTile = stack[stack.Count - 1];
+        Tile tileScript = lastTile.GetComponent<Tile>();
+        if (tileScript != null)
+            tileScript.enabled = false;
+    }
+
+    foreach (GameObject tile in stack)
+    {
+        Rigidbody rb = tile.GetComponent<Rigidbody>();
+        if (rb == null)
+        {
+            rb = tile.AddComponent<Rigidbody>();
+        }
+        rb.isKinematic = false;
+        rb.useGravity = true;
+
+        Vector3 forceDir = (tile.transform.position - stack[0].transform.position).normalized + Vector3.right;
+        rb.AddForce(forceDir * 2f, ForceMode.Impulse);
+    }
+
+    StartCoroutine(ResetAfterSlomo());
+    StartCoroutine(EndCamera());
+    StartCoroutine(ShowGameOverPanel());
+}
+
+
+   void EnablePhysicsAndFall()
    {
-       if (finishedGame) return;
+      
+       foreach (GameObject t in stack)
+       {
+           Rigidbody rb = t.GetComponent<Rigidbody>();
+           if (rb != null)
+               rb.isKinematic = false;
+       }
+   }
 
-       finishedGame = true;
-       StartButton.SetActive(true);
-       Time.timeScale = 0.3f;
+   void CheckTowerInstability()
+   {
+       bool isInstable = false;
+       foreach (var tile in stack)
+       {
+           Vector3 upDirection = tile.transform.up;
+           if (Vector3.Angle(Vector3.up, upDirection) > 30f) 
+           {
+               isInstable = true;
+               break;
+           }
+       }
 
-       StartCoroutine(ResetAfterSlomo());
-       StartCoroutine(EndCamera());
-
-       StartCoroutine(ShowGameOverPanel());
+       if (isInstable)
+       {
+           EnablePhysicsAndFall();
+       }
    }
 
    IEnumerator ShowGameOverPanel()
